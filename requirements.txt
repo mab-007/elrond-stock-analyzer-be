@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+pandas
+openai
+pdfplumber
+bse
+httpx
+openpyxl
