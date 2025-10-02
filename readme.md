@@ -12,23 +12,27 @@ pip (Python package installer)
 ⚙️ Setup & Installation
 1. Clone the Repository
 
+```
 git clone [elrond-stock-analyzer-be](https://github.com/mab-007/elrond-stock-analyzer-be)
 cd elrond-stock-analyzer-be
+```
 
 2. Set Up Environment Variables
 
 Create a file named `.env` in the root of the project directory and add your OpenAI API key to it:
 
+```
 OPENAI_API_KEY="your_secret_api_key_here"
+```
 
 2. Create and Activate a Virtual Environment
 
 A virtual environment (venv) is highly recommended to keep project dependencies isolated.
 
 If you don't have a venv directory yet, create one:
-
+```
 python3 -m venv venv
-
+```
 This command creates a new folder named venv in your project directory.
 
 Activate the virtual environment:
