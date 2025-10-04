@@ -53,7 +53,7 @@ def run_analysis_pipeline(
     # --- Step 3: Analyze PDFs and Rank ---
     os.makedirs(os.path.dirname(output_excel_file), exist_ok=True)
     # The function now needs to return the dataframe for the API response
-    ranked_df = analyze_and_rank_pdfs(pdf_folder_path=pdf_folder, output_file_path=output_excel_file)
+    ranked_df = analyze_and_rank_pdfs(input_csv_path=filtered_csv_path, pdf_folder_path=pdf_folder, output_file_path=output_excel_file)
 
     if ranked_df is None or ranked_df.empty:
         return {"message": "PDFs were downloaded, but analysis yielded no results."}

@@ -6,3 +6,4 @@ pdfplumber
 bse
 httpx
 openpyxl
+python-dotenv
