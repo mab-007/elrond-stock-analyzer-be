@@ -56,6 +56,21 @@ def fetch_and_filter_announcements(
         return pd.DataFrame()
 
     df = pd.DataFrame(all_rows)
+
+    # 1.a. Check for existing entries and mark new ones, to reduce the number of api calls later
+    excel_path = f"{output_dir}/bse_announcements_{date_str}.xlsx"
+
+    if os.path.exists(excel_path):
+        df_existing = pd.read_excel(excel_path)
+
+        existing_scrips = df_existing['SCRIP_CD'].astype(str).str.strip()
+        fetched_scrips = df['SCRIP_CD'].astype(str).str.strip()
+        new_mask = ~fetched_scrips.isin(existing_scrips)
+        df['is_new_entry'] = new_mask
+    else:
+        df['is_new_entry'] = True
+
+
     df.to_excel(f"{output_dir}/bse_announcements_{date_str}.xlsx", index=False)
 
     # 2. Filter by Market Cap and Time
@@ -69,7 +84,8 @@ def fetch_and_filter_announcements(
     df_filtered_mcap = df_merged[(df_merged["Market Cap"] >= market_cap_start) & (df_merged["Market Cap"] <= market_cap_end)]
 
     cutoff_datetime = datetime.strptime(f"{date_str} {cut_off_time_str}", "%Y-%m-%d %H:%M:%S")
-    df_filtered_mcap["DT_TM"] = pd.to_datetime(df_filtered_mcap["DT_TM"], errors='coerce')
+
+    df_filtered_mcap.loc[:, "DT_TM"] = pd.to_datetime(df_filtered_mcap["DT_TM"], errors='coerce')
     df_final = df_filtered_mcap[df_filtered_mcap["DT_TM"] > cutoff_datetime].copy()
     df_final['ATTACHMENTNAME'] = "https://www.bseindia.com/xml-data/corpfiling/AttachLive/" + df_final['ATTACHMENTNAME'].astype(str)
 

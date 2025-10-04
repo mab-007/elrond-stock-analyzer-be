@@ -44,7 +44,8 @@ def download_announcement_pdfs(input_csv_path: str, output_pdf_dir: str):
     for _, row in df_announcements.iterrows():
         url = row.get("ATTACHMENTNAME")
         scrip_cd = row.get("SCRIP_CD")
-        if pd.notnull(url) and pd.notnull(scrip_cd) and str(url).startswith("http"):
+        is_new_entry = row.get("is_new_entry", True)
+        if is_new_entry and pd.notnull(url) and pd.notnull(scrip_cd) and str(url).startswith("http"):
             download_tasks.append((url, str(scrip_cd)))
 
     if not download_tasks:
