@@ -92,7 +92,7 @@ def _process_pdf(file_path: str) -> dict | None:
             "SCRIP_CD": scrip_cd, "Impact": imp_tag, "Summary": summ, "Price_Range": prng, "Rationale": rat}
 
 
-def analyze_and_rank_pdfs(pdf_folder_path: str, output_file_path: str):
+def analyze_and_rank_pdfs(filtered_df: pd.DataFrame, pdf_folder_path: str, output_file_path: str):
     """
     Analyzes all PDFs in a folder, ranks them based on AI-driven impact
     assessment, saves the result to an Excel file, and returns the DataFrame.
@@ -107,24 +107,73 @@ def analyze_and_rank_pdfs(pdf_folder_path: str, output_file_path: str):
         print(f"Error: PDF folder not found at {pdf_folder_path}")
         return None
 
-    pdf_files = [
-        os.path.join(pdf_folder_path, f)
-        for f in os.listdir(pdf_folder_path)
+    # Read input CSV and filter for new entries
+    input_df = filtered_df
+    input_df = input_df[input_df["is_new_entry"] == True]
+
+    # Extract PDF filenames from ATTACHMENTNAME column
+    input_df["PDF_File"] = (
+        '(' + 
+        input_df["SCRIP_CD"].fillna("").astype(str).str.strip()
+        + ")_"
+        + input_df["ATTACHMENTNAME"].fillna("").astype(str).map(os.path.basename).str.strip()
+    )
+
+    # List of all PDFs in the folder
+    all_pdf_files = set(
+        f for f in os.listdir(pdf_folder_path)
         if f.lower().endswith(".pdf")
-    ]
+    )
 
-    if not pdf_files:
-        print("No PDF files found in the specified folder.")
-        return pd.DataFrame()
+    # PDFs to analyze (new entries)
+    pdfs_to_analyze = set(input_df["PDF_File"]) & all_pdf_files
 
-    print(f"Starting analysis of {len(pdf_files)} PDFs with 5 workers...")
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        future_to_file = {executor.submit(_process_pdf, pdf_path): pdf_path for pdf_path in pdf_files}
-        for i, future in enumerate(as_completed(future_to_file), 1):
-            result = future.result()
-            print(f"Processed {i}/{len(pdf_files)}: {os.path.basename(future_to_file[future])}")
-            if result:
-                rows.append(result)
+    # If output file exists, read previous results
+    if os.path.exists(output_file_path):
+        prev_df = pd.read_excel(output_file_path)
+    else:
+        prev_df = pd.DataFrame()
+
+    rows = []
+
+    # Analyze new PDFs
+    if pdfs_to_analyze:
+        print(f"Starting analysis of {len(pdfs_to_analyze)} new PDFs with 5 workers...")
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            future_to_file = {
+                executor.submit(_process_pdf, os.path.join(pdf_folder_path, pdf_file)): pdf_file
+                for pdf_file in pdfs_to_analyze
+            }
+            for i, future in enumerate(as_completed(future_to_file), 1):
+                result = future.result()
+                print(f"Processed {i}/{len(pdfs_to_analyze)}: {future_to_file[future]}")
+                if result:
+                    rows.append(result)
+
+    # Add rows for non-new entries from previous output
+    non_new_pdfs = (set(all_pdf_files) - pdfs_to_analyze)
+
+    ## TODO: remove this for newer ones 
+    # take only the first number enclosed inside parentheses
+    non_new_pdfs = {int(re.match(r'^\((\d+)\)', fn).group(1)) for fn in non_new_pdfs if re.match(r'^\((\d+)\)', fn)}
+    print("non new pdfs after removing (SCRIP_CD)")
+    print(non_new_pdfs)
+    print("prev_df")
+    print(prev_df.info())
+
+    print("old rows")
+    print(rows)
+
+    # Extract the numeric SCRIP_CD from the filename and overwrite the 'File' column.
+    # modify the old rows as df['File'] = df['File'].str.extract(r'^\((\d+)\)').fillna('N/A') to prevent modifying the old rows again
+    rows = [{**row, "File": int(re.match(r'^\((\d+)\)', row["File"]).group(1))} if re.match(r'^\((\d+)\)', row["File"]) else row for row in rows]
+
+    if not prev_df.empty and not non_new_pdfs == set():
+        prev_rows = prev_df[prev_df["File"].isin(non_new_pdfs)].to_dict(orient="records")
+        rows.extend(prev_rows)
+    
+    print("all rows")
+    print(rows)
 
     if not rows:
         print("No valid PDFs were processed.")
@@ -138,8 +187,9 @@ def analyze_and_rank_pdfs(pdf_folder_path: str, output_file_path: str):
 
     df["Impact_Score"] = df["Impact"].apply(impact)
     df["Mid_%"] = df["Price_Range"].apply(lambda r: sum(price_mid(r)) / len(price_mid(r)) if price_mid(r) else 0)
-    # Extract the numeric SCRIP_CD from the filename and overwrite the 'File' column.
-    df['File'] = df['File'].str.extract(r'^\((\d+)\)').fillna('N/A')
+
+    # Extract the numeric SCRIP_CD from the filename and overwrite the 'File' column. -> already being done in the rows above
+    # df['File'] = df['File'].str.extract(r'^\((\d+)\)').fillna('N/A')
 
     # Filter for rows where the mid-point percentage is greater than 0.
     df = df[df["Mid_%"] > 0].copy()
@@ -147,14 +197,21 @@ def analyze_and_rank_pdfs(pdf_folder_path: str, output_file_path: str):
     df.sort_values(["Impact_Score", "Mid_%"], ascending=[False, False], inplace=True)
     # df = df.drop_duplicates(subset="Company", keep="first")
     df.reset_index(drop=True, inplace=True)
+
+    # Add Rank column starting from 1, but if already exists, still add the new ranks
+    if "Rank" in df.columns:
+        df.drop(columns=["Rank"], inplace=True)
     df.insert(0, "Rank", df.index + 1)
+
     df.to_excel(output_file_path, index=False, sheet_name="Screened_Ranked")
     print(f":white_check_mark: Analysis saved to: {output_file_path}")
     return df
 
 if __name__ == "__main__":
     date_str = datetime.now().strftime('%Y-%m-%d')
-    pdf_folder = f"./reports"
+    input_csv_path = f"./bse_announcements/filtered_announcements_{date_str}.csv"
+    filtered_df = pd.read_csv(input_csv_path)
+    pdf_folder = f"./reports/reports_{date_str}"
     output_file = f"./output/summary_price_jump_{date_str}.xlsx"
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
-    analyze_and_rank_pdfs(pdf_folder, output_file)
+    analyze_and_rank_pdfs(filtered_df, pdf_folder, output_file)
