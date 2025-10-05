@@ -27,14 +27,14 @@ def _download_pdf(url: str, pdf_dir: str, scrip_cd: str) -> str:
     except Exception as exc:
         return f"FAIL: {url} ({exc})"
 
-def download_announcement_pdfs(input_csv_path: str, output_pdf_dir: str):
+def download_announcement_pdfs(filtered_df: pd.DataFrame, output_pdf_dir: str):
     """
-    Downloads all PDF announcements listed in a CSV file.
+    Downloads all PDF announcements listed in a DataFrame.
     """
     try:
-        df_announcements = pd.read_csv(input_csv_path)
-    except FileNotFoundError:
-        print(f"Error: Input file not found at {input_csv_path}")
+        df_announcements = filtered_df
+    except Exception as e:
+        print(f"Error reading the input DataFrame: {e}")
         return
 
     os.makedirs(output_pdf_dir, exist_ok=True)
