@@ -5,6 +5,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import math
 import os
 
+from service.announcement_service import AnnouncementService # Import the service
+
 def fetch_and_filter_announcements(
     target_date: datetime,
     market_cap_start: int = 2500,
@@ -17,6 +19,10 @@ def fetch_and_filter_announcements(
     Fetches BSE announcements for a specific date, filters them by market cap and time,
     and returns a processed DataFrame.
     """
+    print(f"Storing raw announcements for in MongoDB...")
+
+    announcement_service = AnnouncementService() # Instantiate the service
+
     os.makedirs(output_dir, exist_ok=True)
     date_str = target_date.strftime('%Y-%m-%d')
 
@@ -56,7 +62,10 @@ def fetch_and_filter_announcements(
         return pd.DataFrame()
 
     df = pd.DataFrame(all_rows)
-    df.to_excel(f"{output_dir}/bse_announcements_{date_str}.xlsx", index=False)
+    # Store raw announcements in MongoDB using the create_filtered_announcements service method
+    print(f"Storing raw announcements for {date_str} in MongoDB...")
+    result = announcement_service.create_announcements(df, f"raw_bse_announcements")
+    print(f"MongoDB insertion result for raw announcements: {result}")
 
     # 2. Filter by Market Cap and Time
     try:
@@ -72,9 +81,8 @@ def fetch_and_filter_announcements(
     df_filtered_mcap["DT_TM"] = pd.to_datetime(df_filtered_mcap["DT_TM"], errors='coerce')
     df_final = df_filtered_mcap[df_filtered_mcap["DT_TM"] > cutoff_datetime].copy()
     df_final['ATTACHMENTNAME'] = "https://www.bseindia.com/xml-data/corpfiling/AttachLive/" + df_final['ATTACHMENTNAME'].astype(str)
-
-    df_final.to_csv(f"{output_dir}/filtered_announcements_{date_str}.csv", index=False)
-    print(f"Filtered announcements saved to {output_dir}/filtered_announcements_{date_str}.csv")
+    
+    print(f"Returning {len(df_final)} filtered announcements.")
     return df_final
 
 if __name__ == "__main__":
