@@ -3,6 +3,8 @@ import requests
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+from typing import Union, Optional # Using Union or Optional fixes the error
+
 
 HEADERS = {
     "User-Agent": (
@@ -12,7 +14,7 @@ HEADERS = {
     "Referer": "https://www.bseindia.com/",  # <- *critical*
 }
 
-def _download_pdf_to_memory(url: str) -> bytes | None:
+def _download_pdf_to_memory(url: str) -> Union[bytes, None]:
     """Downloads a single PDF into a bytes buffer."""
     try:
         with requests.get(url, headers=HEADERS, stream=True, timeout=300, verify=False) as r:
