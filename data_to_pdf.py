@@ -12,56 +12,47 @@ HEADERS = {
     "Referer": "https://www.bseindia.com/",  # <- *critical*
 }
 
-def _download_pdf(url: str, pdf_dir: str, scrip_cd: str) -> str:
-    """Stream one PDF; return local file path or error string."""
-    original_fname = url.split("/")[-1]
-    new_fname = f"({scrip_cd})_{original_fname}"
+def _download_pdf_to_memory(url: str) -> bytes | None:
+    """Downloads a single PDF into a bytes buffer."""
     try:
-        fname = os.path.join(pdf_dir, new_fname)
         with requests.get(url, headers=HEADERS, stream=True, timeout=300, verify=False) as r:
             r.raise_for_status()  # 4xx/5xx → exception
-            with open(fname, "wb") as f:
-                for chunk in r.iter_content(8192):
-                    f.write(chunk)
-        return fname
+            return r.content
     except Exception as exc:
-        return f"FAIL: {url} ({exc})"
+        print(f"FAIL: {url} ({exc})")
+        return None
 
-def download_announcement_pdfs(input_csv_path: str, output_pdf_dir: str):
+def download_pdfs_to_dataframe(announcements_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Downloads all PDF announcements listed in a CSV file.
+    Downloads all PDF announcements from a DataFrame into a new 'pdf_content' column.
     """
-    try:
-        df_announcements = pd.read_csv(input_csv_path)
-    except FileNotFoundError:
-        print(f"Error: Input file not found at {input_csv_path}")
-        return
-
-    os.makedirs(output_pdf_dir, exist_ok=True)
-
-    # Create a list of tuples (url, scrip_cd) for valid rows
+    # Create a list of tuples (index, url) for valid rows
     download_tasks = []
-    for _, row in df_announcements.iterrows():
+    for index, row in announcements_df.iterrows():
         url = row.get("ATTACHMENTNAME")
-        scrip_cd = row.get("SCRIP_CD")
-        if pd.notnull(url) and pd.notnull(scrip_cd) and str(url).startswith("http"):
-            download_tasks.append((url, str(scrip_cd)))
+        if pd.notnull(url) and str(url).startswith("http"):
+            download_tasks.append((index, url))
 
     if not download_tasks:
-        print("No valid URLs with corresponding SCRIP_CD found in the input file.")
-        return
+        print("No valid URLs found in the DataFrame.")
+        announcements_df['pdf_content'] = None
+        return announcements_df
 
     num_workers = min(20, max(5, len(download_tasks) // 4))
     print(f"Starting PDF download with {num_workers} workers for {len(download_tasks)} URLs.")
 
+    # Use a dictionary to store results, keyed by the DataFrame index.
+    # This avoids issues with non-sequential or non-zero-based indices.
+    pdf_contents_map = {}
     with ThreadPoolExecutor(max_workers=num_workers) as pool:
-        futures = {pool.submit(_download_pdf, url, output_pdf_dir, scrip_cd): url for url, scrip_cd in download_tasks}
-        for i, fut in enumerate(as_completed(futures), 1):
-            res = fut.result()
-            print(f"{i}/{len(download_tasks)} → {res}")
-
-if __name__ == "__main__":
-    date_str = datetime.now().strftime('%Y-%m-%d')
-    input_csv = f"./bse_announcements/filtered_announcements_{date_str}.csv"
-    output_dir = "./reports"
-    download_announcement_pdfs(input_csv, output_dir)
+        future_to_task = {pool.submit(_download_pdf_to_memory, url): (index, url) for index, url in download_tasks}
+        for i, fut in enumerate(as_completed(future_to_task), 1):
+            index, url = future_to_task[fut]
+            pdf_bytes = fut.result()
+            if pdf_bytes:
+                pdf_contents_map[index] = pdf_bytes
+            print(f"{i}/{len(download_tasks)} → Downloaded {url}")
+    
+    # Map the downloaded content back to the DataFrame using its index.
+    announcements_df['pdf_content'] = announcements_df.index.map(pdf_contents_map)
+    return announcements_df.dropna(subset=['pdf_content'])
