@@ -6,3 +6,6 @@ pdfplumber
 bse
 httpx
 openpyxl
+dotenv
+python-dotenv
+pymongo
