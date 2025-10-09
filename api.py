@@ -11,6 +11,9 @@ from data_to_pdf import download_pdfs_to_dataframe
 from results import analyze_pdfs_from_dataframe
 from database import connect_to_mongo, close_mongo_connection
 from service.announcement_service import AnnouncementService
+from service.ui_data_service import UIDataService
+from entity.ui_data import UIDataItem
+from typing import List
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -109,6 +112,49 @@ def get_predictions(
 
     # Convert DataFrame to a list of dictionaries (JSON array) and return
     return predictions_df.to_dict(orient="records")
+
+
+@app.post("/ui-data/", summary="Store UI Data Document")
+def store_ui_data(
+    data_items: List[UIDataItem]
+):
+    """
+    Receives a list of UI data items, validates them, and stores them
+    as a single versioned document in MongoDB.
+    """
+    ui_service = UIDataService()
+    # Convert Pydantic models to dicts for the service layer
+    data_items_as_dicts = [item.model_dump() for item in data_items]
+    
+    try:
+        result = ui_service.create_ui_data_document(data_items_as_dicts)
+    except ConnectionError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    if result.get("errors"):
+        raise HTTPException(status_code=422, detail=result["errors"])
+
+    return {"message": "UI data stored successfully", "inserted_id": result["inserted_id"]}
+
+
+@app.get("/ui-data/today", summary="Fetch latest UI data for the current date")
+def get_todays_ui_data():
+    """
+    Retrieves the most recent UI data document from MongoDB that contains
+    data items for the current system date.
+    """
+    # Hardcode to use the current system time
+    target_date = datetime.now()
+
+    ui_service = UIDataService()
+    try:
+        latest_data = ui_service.get_latest_ui_data(target_date=target_date)
+    except ConnectionError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    if not latest_data:
+        raise HTTPException(status_code=404, detail=f"No UI data found for today's date ({target_date.strftime('%Y-%m-%d')}).")
+    return latest_data
 
 
 @app.get("/announcements/latest", summary="Fetch the latest raw announcement")
