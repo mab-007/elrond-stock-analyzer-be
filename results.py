@@ -11,6 +11,8 @@ from httpx import ReadTimeout, ConnectError
 from datetime import datetime
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Union, Optional # Import to fix the type hint error
+
 
 warnings.filterwarnings("ignore", message=r"Cannot set gray non-stroke color")
 
@@ -65,7 +67,7 @@ def _call_llm(prompt, user, retries=3):
             print(f"Unexpected error during llm call: {e}")
             return None
 
-def _process_pdf_from_memory(pdf_row: pd.Series) -> dict | None:
+def _process_pdf_from_memory(pdf_row: pd.Series) ->  Optional[dict]:
     """
     Processes a single PDF from memory: extracts text, calls LLM for analysis,
     and returns a dictionary with the results.
