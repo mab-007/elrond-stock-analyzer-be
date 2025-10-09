@@ -4,6 +4,7 @@ from pydantic import ValidationError, TypeAdapter
 from datetime import datetime, timedelta
 from database import db_mongo
 from entity.ui_data import UIDataDocument, UIDataItem
+from typing import Dict, Any, Optional
 
 class UIDataService:
     """
@@ -42,7 +43,7 @@ class UIDataService:
             # Return a more standard error structure
             return {"inserted_id": None, "errors": e.json()}
 
-    def get_latest_ui_data(self, target_date: datetime = None, collection_name: str = "ui_data") -> Dict[str, Any] | None:
+    def get_latest_ui_data(self, target_date: datetime = None, collection_name: str = "ui_data") -> Optional[Dict[str, Any]]:
         """
         Fetches the most recent UI data document. If a date is provided, it fetches
         the latest document containing data for that specific date.
