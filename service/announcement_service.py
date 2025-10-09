@@ -7,6 +7,8 @@ from database import db_mongo
 from entity.filtered_announcements import FilteredAnnouncement
 from entity.prediction import Prediction
 
+from typing import Union # Or Optional
+
 class AnnouncementService:
     """
     Service class to handle all database operations related to announcements.
@@ -116,7 +118,7 @@ class AnnouncementService:
         
         return {"inserted_count": len(result.inserted_ids), "errors": errors}
 
-    def get_latest_announcements(self) -> dict | None:
+    def get_latest_announcements(self) -> Union[dict, None]:
         """
         Fetches the single most recent prediction from the 'predictions' collection
         based on the 'News_submission_dt' field.
